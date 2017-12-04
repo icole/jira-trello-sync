@@ -1,0 +1,11 @@
+---
+jira:
+  site: ''
+  username: ''
+  password: ''
+  filter: ''
+trello:
+  public_key: ''
+  token: ''
+  board_id: ''
+  inbox_list_id: ''

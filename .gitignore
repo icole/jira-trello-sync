@@ -1,0 +1,4 @@
+tmp/
+.ruby-*
+.DS_Store
+jira-trello.yaml
