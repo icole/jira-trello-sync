@@ -23,7 +23,9 @@ def populate_options
 
   # Configure Trello
   @trello_board_id = config['trello']['board_id']
-  @trello_inbox_list_id = config['trello']['inbox_list_id']
+  @trello_inbox_name = config['trello']['inbox_list']
+  @trello_pending_name = config['trello']['pending_list']
+  @trello_done_name = config['trello']['done_list']
   Trello.configure do |trello_config|
     trello_config.developer_public_key = config['trello']['public_key']
     trello_config.member_token = config['trello']['token']
@@ -53,7 +55,21 @@ def trello_board
 end
 
 def trello_inbox_list
-  Trello::List.find(@trello_inbox_list_id)
+  @inbox_list ||= trello_board.lists.find{|list| list.name == @trello_inbox_name}
+end
+
+def trello_active_lists
+  @active_list ||= trello_board.lists.select{|list| ![@trello_pending_name, @trello_done_name].include? list.name}
+end
+
+def trello_active_cards
+  active_cards = []
+  trello_active_lists.each do |list|
+    list.cards.each do |card|
+      active_cards << card
+    end
+  end
+  active_cards
 end
 
 def create_trello_attachments(jira_issue, trello_card)
@@ -74,7 +90,7 @@ def create_trello_cards(jira_issues)
     puts card_name
     trello_card = Trello::Card.create({
                                 name: card_name,
-                                list_id: @trello_inbox_list_id,
+                                list_id: trello_inbox_list.id,
                                 desc: "#{jira_issue_link}\n\n\n#{jira_issue.fields['description']}",
                                 card_labels: labels.select{|l| l.name == jira_issue.fields["priority"]["name"]}.map{|l| l.id}.join(",")
                                })
@@ -89,16 +105,22 @@ def clear_trello_inbox
   end
 end
 
+def generate_trello_card_keys
+  trello_card_keys = trello_active_cards.map{|c| c.name.split(" - ")[0]}
+  # @TODO Extract this sanitization out to something customizable
+  trello_card_keys.select!{|key| /.*ENG-.*/.match key}.map!{|key| /(.*)(ENG-.*)/.match(key)[2]}
+end
+
 def sync_trello_cards
   jira_issues = get_jira_issues
   jira_issue_keys = jira_issues.map{|i| i.key}
-  trello_card_keys = trello_board.cards.map{|c| c.name.split(" - ")[0]}
+  trello_card_keys = generate_trello_card_keys
   new_jira_keys = jira_issue_keys - trello_card_keys
   new_jira_issues = jira_issues.select{|issue| new_jira_keys.include?(issue.key)}
   puts "Found #{new_jira_issues.count} new JIRA issues"
   create_trello_cards(new_jira_issues)
-  #inactive_trello_keys = trello_card_keys - jira_issue_keys
-  #puts "Inactive Trello cards: #{inactive_trello_keys}"
+  inactive_trello_keys = trello_card_keys - jira_issue_keys
+  puts "Inactive Trello cards: #{inactive_trello_keys}"
 end
 
 def main
